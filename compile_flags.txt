@@ -1,0 +1,8 @@
+--language
+c++
+-std=c++14
+-Iinclude
+-Ibuild/_deps/googletest-src/googletest/include
+-Ibuild/_deps/googletest-src/googlemock/include
+-Wall
+-Wextra
