@@ -44,4 +44,9 @@ target_link_libraries(unittests
     PRIVATE gtest
 )
 
-add_test(NAME unit-tests COMMAND unittests)
+add_custom_command(
+     TARGET unittests
+     COMMENT "Running unit-tests"
+     POST_BUILD
+     COMMAND unittests
+)

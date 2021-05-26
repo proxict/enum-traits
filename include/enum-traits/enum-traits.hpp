@@ -15,7 +15,9 @@
 #error "This version of gcc is not supported. Please, use version 9 or higher"
 #endif
 #elif defined(_MSC_VER)
-#error "Sorry, MSVC compiler is not yet supported"
+#if _MSC_VER < 1910
+#error "This version of MSVC is not supported. Please, use version 19.10 or higher"
+#endif
 #else
 #error "Unknown compiler - not supported"
 #endif
@@ -143,23 +145,27 @@ namespace detail {
     }
 
     template <typename T, T TValue>
-    struct EnumValid {
-        static constexpr bool valid() noexcept {
-            constexpr std::size_t start = find(__PRETTY_FUNCTION__, "TValue = ") + 9;
-            static_assert(start != StringNpos, "Unexpected __PRETTY_FUNCTION__ output");
-#if defined(__clang__)
-            constexpr char valueStart = __PRETTY_FUNCTION__[start];
-            return (valueStart != '-' && !(valueStart >= '0' && valueStart <= '9'));
-#elif defined(__GNUC__) || defined(__GNUG__)
-            return find(__PRETTY_FUNCTION__, '(', start) == StringNpos;
-#elif defined(_MSC_VER)
-            return false;
-#else
-            return false;
+    constexpr bool validateEnum() noexcept {
+#if defined(__clang__) || defined(__GNUC__) || defined(__GNUG__)
+        constexpr std::size_t start = find(__PRETTY_FUNCTION__, "TValue = ") + 9;
+        static_assert(start != StringNpos, "Unexpected __PRETTY_FUNCTION__ output");
 #endif
-        }
+#if defined(__clang__)
+        constexpr char valueStart = __PRETTY_FUNCTION__[start];
+        return (valueStart != '-' && !(valueStart >= '0' && valueStart <= '9'));
+#elif defined(__GNUC__) || defined(__GNUG__)
+        return find(__PRETTY_FUNCTION__, '(', start) == StringNpos;
+#elif defined(_MSC_VER)
+        constexpr std::size_t end = sizeof(__FUNCSIG__) - 17;
+        return rfind(__FUNCSIG__, ')', end) == StringNpos;
+#else
+        return false;
+#endif
+    }
 
-        static constexpr bool value = valid();
+    template <typename T, T TValue>
+    struct EnumValid {
+        static constexpr bool value = validateEnum<T, TValue>();
     };
 
     template <typename T, typename std::underlying_type<T>::type TValue>
@@ -270,9 +276,11 @@ namespace detail {
 
     template <typename T>
     struct EnumRange {
-        static constexpr std::size_t range() noexcept { return EnumMax<T>::value - EnumMin<T>::value + 1; }
+        static constexpr std::size_t range() noexcept {
+            return static_cast<std::size_t>(EnumMax<T>::value - EnumMin<T>::value + 1);
+        }
         static constexpr std::size_t value =
-            range() <= (ENUM_TRAITS_MAX_ENUM_VALUE - ENUM_TRAITS_MIN_ENUM_VALUE + 1) ? range() : 0;
+            range() <= (ENUM_TRAITS_MAX_ENUM_VALUE - ENUM_TRAITS_MIN_ENUM_VALUE + 1) ? range() : 0ULL;
     };
 
     template <typename T, T... TArgs>
@@ -349,15 +357,32 @@ namespace detail {
     template <typename T, T TValue>
     constexpr auto getNameOfValidEnum() noexcept {
         static_assert(EnumValid<T, TValue>::value, "This function only works with valid enum values");
+
+#if defined(__clang__) || defined(__GNUC__) || defined(__GNUG__)
         constexpr std::size_t end = sizeof(__PRETTY_FUNCTION__) - 2;
         constexpr std::size_t colonPos = rfind(__PRETTY_FUNCTION__, ':', end);
         static_assert(colonPos != StringNpos, "Unexpected __PRETTY_FUNCTION__ output");
         constexpr std::size_t begin = colonPos + 1;
-        static_assert(begin < end, "Unexpected __PRETTY_FUNCTION__ output: begin must be lower than end");
+#elif defined(_MSC_VER)
+        constexpr std::size_t end = sizeof(__FUNCSIG__) - 17;
+        constexpr std::size_t colonPos = rfind(__FUNCSIG__, ':', end);
+        static_assert(colonPos != StringNpos, "Unexpected __FUNCSIG__ output");
+        constexpr std::size_t begin = colonPos + 1;
+#else
+#error "Unknown compiler - not supported"
+#endif
+
+        static_assert(begin < end, "Unexpected output: begin must be lower than end");
         constexpr std::size_t size = end - begin;
         char name[size] = {};
         for (std::size_t i = 0; i < size; ++i) {
+#if defined(__clang__) || defined(__GNUC__) || defined(__GNUG__)
             name[i] = __PRETTY_FUNCTION__[begin + i];
+#elif defined(_MSC_VER)
+            name[i] = __FUNCSIG__[begin + i];
+#else
+#error "Unknown compiler - not supported"
+#endif
         }
         return StaticString(name);
     }
@@ -365,15 +390,31 @@ namespace detail {
     template <typename T, T TValue>
     constexpr auto getNameOfInvalidEnum() noexcept {
         static_assert(!EnumValid<T, TValue>::value, "This function only works with invalid enum values");
+
+#if defined(__clang__) || defined(__GNUC__) || defined(__GNUG__)
         constexpr std::size_t end = sizeof(__PRETTY_FUNCTION__) - 2;
         constexpr std::size_t spacePos = rfind(__PRETTY_FUNCTION__, ' ');
         static_assert(spacePos != StringNpos, "Unexpected __PRETTY_FUNCTION__ output");
         constexpr std::size_t begin = spacePos + 1;
+#elif defined(_MSC_VER)
+        constexpr std::size_t end = sizeof(__FUNCSIG__) - 17;
+        constexpr std::size_t commaPos = rfind(__FUNCSIG__, ',', end);
+        static_assert(commaPos != StringNpos, "Unexpected __FUNCSIG__ output");
+        constexpr std::size_t begin = commaPos + 1;
+#else
+#error "Unknown compiler - not supported"
+#endif
         static_assert(begin < end, "Unexpected __PRETTY_FUNCTION__ output: begin must be lower than end");
         constexpr std::size_t size = end - begin;
         char name[size];
         for (std::size_t i = 0; i < size; ++i) {
+#if defined(__clang__) || defined(__GNUC__) || defined(__GNUG__)
             name[i] = __PRETTY_FUNCTION__[begin + i];
+#elif defined(_MSC_VER)
+            name[i] = __FUNCSIG__[begin + i];
+#else
+#error "Unknown compiler - not supported"
+#endif
         }
         return StaticString(name);
     }
